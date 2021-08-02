@@ -1,0 +1,164 @@
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpResponse, HttpParams, HttpHeaders } from '@angular/common/http';
+import { environment } from 'src/environments/environment';
+import { Assignment } from '../assignment-model';
+import { Observable } from 'rxjs';
+import * as FileSaver from 'file-saver';
+import { DatePipe } from '@angular/common';
+import * as Excel from 'exceljs/dist/exceljs.min.js';
+
+const EXCEL_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8';
+const EXCEL_EXTENSION = '.xlsx';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class PmAssignmentService  {
+
+  endDateSelectedData: any = []
+  assignmentAudit: any
+  automationAudit: any
+  endDateRequestAudit: any
+  mapMigrationData: any
+
+  public exportAsExcelFile(json: any, excelFileName: string): void {
+
+    let sName = 'Assignments';
+    let cols = ['Assignment Id', 'Employee Serial', 'Notes Id', 'Status', 'Start Date', 'End Date', 'DoU End Date', 'Extension Date', 'Product Name', 'WSP Notes Id']
+    var today = new Date();
+    let newtoday   =this.datepipe.transform(today, 'ddMMMyyyy_hh-mm-ss '); 
+    var workbook = new Excel.Workbook();
+    workbook.creator = 'Web';
+    workbook.lastModifiedBy = 'Web';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    workbook.addWorksheet(sName, { views: [{ state: 'frozen', ySplit: 1, xSplit: 0, activeCell: 'A1', showGridLines: true }] })
+    var sheet = workbook.getWorksheet(1);
+    let headerRow = sheet.addRow(cols);
+    // headerRow.font = { name: 'Comic Sans MS', family: 4, size: 16, bold: true };
+    headerRow.font = { bold: true }
+    // Cell Style : Fill and Border
+    headerRow.eachCell((cell, number) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFFF00' },
+        bgColor: { argb: '00000000' }
+      }
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+    });
+
+    sheet.getRow(0).values = headerRow;
+
+    sheet.columns = [
+      { key: 'Assignment_ID' },
+      { key: 'Employee_Serial' },
+      { key: 'Employee_NotesID' },
+      { key: 'Assignment_Status' },
+      { key: 'Assignment_StartDate' },
+      { key: 'Assignment_EndDate' },
+      { key: 'ProjectDoU_EndDate' },
+      { key: 'Extension_Date' },
+      { key: 'Project_Name' },
+      { key: 'WSP_NotesID' },
+    ];
+    sheet.addRows(json);
+    sheet.getColumn(1).width = 20;
+    sheet.getColumn(2).width = 20;
+    sheet.getColumn(3).width = 50;
+    sheet.getColumn(4).width = 30;
+    sheet.getColumn(5).width = 20;
+    sheet.getColumn(6).width = 20;
+    sheet.getColumn(7).width = 20;
+    sheet.getColumn(8).width = 20;
+    sheet.getColumn(9).width = 40;
+    sheet.getColumn(10).width = 50;
+
+    workbook.xlsx.writeBuffer().then(data => {
+      var blob: Blob = new Blob([data], { type: EXCEL_TYPE })
+      FileSaver.saveAs(blob, excelFileName + '_' + newtoday + EXCEL_EXTENSION);
+    })
+  }
+
+
+
+//Dropdown in excel for column - 'Reason Code' and 'Automation Program'
+
+  downloadTemplate(reasonCodes, automationCodes, excelFileName: string, sName: string): void {
+
+    
+    let cols = ['Assignment ID', 'Practitioner SL No', 'New End Date(dd-mmm-yy', 'Reason Code', 'Comments', 'Automation Program', 'FTE Benefit', 'Claim ID', 'Work Item Id', 'Future Work Item ID']
+
+    var workbook = new Excel.Workbook();
+    workbook.creator = 'Web';
+    workbook.lastModifiedBy = 'Web';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    workbook.addWorksheet(sName, { views: [{ state: 'frozen', ySplit: 1, xSplit: 0, activeCell: 'A1', showGridLines: true }] })
+    var sheet = workbook.getWorksheet(1);
+    workbook.addWorksheet('hiddenSheet', { state: 'hidden'})
+    var sheet2 = workbook.getWorksheet(2);
+  
+    let headerRow = sheet.addRow(cols);
+    
+    headerRow.font = { bold: true }
+    // Cell Style : Fill and Border
+    headerRow.eachCell((cell, number) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFFF00' },
+        bgColor: { argb: '00000000' }
+      }
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+    });
+
+    sheet.getRow(0).values = headerRow;
+    sheet.columns = [
+      { header: 'Assignment ID', style: {numFmt: '@'}},
+      { header: 'Practitioner SL No', style: {numFmt:'@'}},
+      { header: 'New End Date(dd-mmm-yy)', style: {alignment: {horizontal: 'left'}, numFmt: 'dd-mmm-yy'} },
+      { header: 'Reason Code ID'},
+      { header: 'Comments'},
+      { header: 'Automation Program'},
+      { header: 'FTE Benefit', style: {numFmt:'@'} },
+      { header: 'Claim ID', style: {numFmt:'@'} },
+      { header: 'Work Item Id', style: {numFmt:'@'} },
+      { header: 'Future Work Item ID', style: {numFmt:'@'} },
+    ]
+
+    reasonCodes.forEach((element, index) => {
+      sheet2.getCell('P' + (+index + 2)).value = element
+    })
+    sheet2.getColumn(16).hidden = true;
+    let length = reasonCodes.length + 1
+    sheet.dataValidations.add('D2:D9999',{
+      type: 'list',
+      allowBlank: false,
+      formulae: [`hiddenSheet!$P$2:$P$${length}`]
+    })
+    sheet.dataValidations.add('F2:F9999',{
+      type: 'list',
+      allowBlank: false,
+      formulae: [`"${automationCodes}"`]
+    })
+
+    sheet.getColumn(1).width = 20;
+    sheet.getColumn(2).width = 20;
+    sheet.getColumn(3).width = 25;
+    sheet.getColumn(4).width = 40;
+    sheet.getColumn(5).width = 50;
+    sheet.getColumn(6).width = 40;
+    sheet.getColumn(7).width = 30;
+    sheet.getColumn(8).width = 30;
+    sheet.getColumn(9).width = 30;
+    sheet.getColumn(10).width = 30;
+
+    workbook.xlsx.writeBuffer().then(data => {
+      var blob: Blob = new Blob([data], { type: EXCEL_TYPE })
+      let date = new Date().getTime();
+      let currentDate = moment(date).format('DD-MMM-YYYY HH-mm-ss');
+      FileSaver.saveAs(blob, excelFileName + '_' + currentDate + EXCEL_EXTENSION);
+    })
+  }
+}
